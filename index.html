@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StreamHub Pro - Fixed Version</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:Arial,sans-serif;background:#1a1a3e;color:#fff;min-height:100vh;margin:0}
+        .screen{display:none;min-height:100vh}.screen.active{display:block}
+        .login-screen{padding:40px 20px;text-align:center}
+        .login-box{background:#1a1a3e;border-radius:10px;padding:25px;width:300px;margin:40px auto;box-shadow:0 5px 15px rgba(0,0,0,0.5)}
+        .login-box h2{color:#00d4ff;margin-bottom:10px;font-size:1.6em}
+        .form-group{margin-bottom:15px;text-align:left}
+        .form-group label{display:block;margin-bottom:5px;color:#aaa;font-size:12px}
+        .form-group input{width:100%;padding:8px;border:none;border-radius:5px;background:#0a0a1a;color:#fff;font-size:13px}
+        .btn{padding:10px 20px;border:none;border-radius:5px;cursor:pointer;font-size:13px;font-weight:bold;width:100%}
+        .btn-primary{background:#00d4ff;color:#000;margin-bottom:10px}
+        .msg{padding:8px;border-radius:5px;margin-bottom:10px;text-align:center;display:none;background:#333}
+        .msg.error{color:#ff6b81;border:1px solid #ff4757;background:#3300004d}
+        .header{padding:10px 15px;background:#1a1a3e;border-bottom:2px solid #00d4ff;position:sticky;top:0;z-index:100}
+        .logo{font-size:1.2em;font-weight:bold;color:#00d4ff}
+        .logout-btn{background:#ff4757;color:#fff;padding:5px 10px;border:none;border-radius:4px;font-size:11px;cursor:pointer}
+        .main{display:none;padding:20px}
+        .welcome{text-align:center;padding:40px}
+        .welcome h1{color:#00d4ff;font-size:2em;margin-bottom:10px}
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+    
+    <script>
+    // ===== CLEAN VERSION - NO MINIFIED CODE =====
+    
+    // Simple state - no complex patterns
+    var currentUser = {email:'guest',role:'free'};
+    var currentTab = 'home';
+    var channels = [];
+    
+    // Initialize channels
+    function initChannels(){
+        try{
+            var stored = localStorage.getItem('streamhub_channels');
+            if(stored) channels = JSON.parse(stored);
+            else {
+                channels = [
+                    {name:'Test Channel 1',url:'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.m3u8',cat:'tv'},
+                    {name:'Test Channel 2',url:'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Elephant.m3u8',cat:'tv'}
+                ];
+            }
+            saveChannels();
+        }catch(e){channels=[]}
+    }
+    function saveChannels(){
+        try{localStorage.setItem('streamhub_channels',JSON.stringify(channels))}catch(e){}
+    }
+    
+    // Safe helper
+    function $(id){var el=document.getElementById(id);return el}
+    
+    // Show/hide screens
+    function show(id){
+        var screens=document.querySelectorAll('.screen');
+        for(var i=0;i<screens.length;i++) screens[i].classList.remove('active');
+        var target=$(id);
+        if(target) target.classList.add('active')
+    }
+    
+    // Message display
+    function showMsg(id,msg,success){
+        var el=$(id);
+        if(el){
+            el.innerHTML=msg;
+            el.style.display='block';
+            el.className=success?'msg success':'msg error'
+        }
+    }
+    
+    // AUTH
+    function login(){
+        var e=$('#loginEmail')?$('#loginEmail').value:'';
+        var p=$('#loginPass')?$('#loginPass').value:'';
+        if(!e||!p){showMsg('loginMsg','Please enter email and password',false);return}
+        currentUser={email:e,role:'free'};
+        showMsg('loginMsg','Logged in as '+e,true);
+        setTimeout(function(){show('#mainScreen');initChannels();render()},300)
+    }
+    
+    function register(){
+        var e=$('#regEmail')?$('#regEmail').value:'';
+        var p=$('#regPass')?$('#regPass').value:'';
+        if(!e||!p){showMsg('regMsg','Please fill all fields',false);return}
+        currentUser={email:e,role:'free'};
+        showMsg('loginMsg','Registration successful!',true);
+        setTimeout(function(){show('#mainScreen');initChannels();render()},300)
+    }
+    
+    function logout(){
+        currentUser=null;currentTab='home';
+        saveChannels();show('#loginScreen');$('app').innerHTML=''
+    }
+    
+    // CHANNEL MANAGEMENT
+    function addChannel(){
+        var name=prompt('Channel name:');
+        if(!name)return;
+        var url=prompt('Stream URL:');
+        if(!url)return;
+        var cat=prompt('Category:');
+        if(!cat)return;
+        channels.push({name:name,url:url,cat:cat});
+        saveChannels();alert('Added!');render()
+    }
+    
+    function delCh(name){
+        if(!confirm('Delete '+name+'?'))return;
+        channels=channels.filter(function(ch){return ch.name!==name});
+        saveChannels();alert('Deleted!');render()
+    }
+    
+    // TAB SWITCHING
+    function switchTab(tab){currentTab=tab;render()}
+    
+    function render(){
+        if(!currentUser)return;
+        var role=currentUser.role;
+        var tabs=['home','tv','movie'];
+        var tabList='';
+        for(var t=0;t<tabs.length;t++){
+            var active=(currentTab===tabs[t])?'class="active"':'';
+            tabList+='<button class="tab-btn '+active+'" onclick="switchTab(\''+tabs[t]+'\')">'+tabs[t].charAt(0).toUpperCase()+tabs[t].slice(1)+'</button>'
+        }
+        var header='<div class="header"><div class="logo">StreamHub Pro</div><div class="header-right"><span class="user-badge '+role+'">'+role.toUpperCase()+'</span><span style="font-size:12px">'+currentUser.email+'</span><button class="logout-btn" onclick="logout()">Logout</button></div>'+tabList+'</div>';
+        var content='<div class="main"><div class="welcome"><h1>Welcome</h1><p>Player Loading...</p></div></div>';
+        $('app').innerHTML=header+content
+    }
+    
+    document.addEventListener('DOMContentLoaded',function(){
+        show('#loginScreen');
+        initChannels()
+    })
+    </script>
+</body>
+</html>
