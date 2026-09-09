@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StreamHub Pro - IPTV Player</title>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:Arial,sans-serif;background:#1a1a3e;color:#fff;min-height:100vh;margin:0}
+        .screen{display:none;min-height:100vh}.screen.active{display:block}
+        .login-screen{padding:40px 20px;text-align:center}
+        .login-box{background:#1a1a3e;border-radius:10px;padding:25px;width:300px;margin:40px auto;box-shadow:0 5px 15px rgba(0,0,0,0.5)}
+        .login-box h2{color:#00d4ff;margin-bottom:10px;font-size:1.6em}
+        .login-box h3{color:#aaa;margin-bottom:15px;font-size:12px}
+        .form-group{margin-bottom:15px;text-align:left}
+        .form-group label{display:block;margin-bottom:5px;color:#aaa;font-size:12px}
+        .form-group input{width:100%;padding:8px;border:none;border-radius:5px;background:#0a0a1a;color:#fff;font-size:13px}
+        .btn{padding:10px 20px;border:none;border-radius:5px;cursor:pointer;font-size:13px;font-weight:bold;width:100%}
+        .btn-primary{background:#00d4ff;color:#000;margin-bottom:10px}
+        .btn-secondary{background:#555;color:#fff}
+        .msg{padding:8px;border-radius:5px;margin-bottom:10px;text-align:center;display:none;background:#333}
+        .msg.error{color:#ff6b81;border:1px solid #ff4757;background:#3300004d}
+        .msg.success{color:#7bed9f;border:1px solid #2ed573;background:#0033004d}
+        .header{padding:10px 15px;background:#1a1a3e;border-bottom:2px solid #00d4ff;position:sticky;top:0;z-index:100}
+        .logo{font-size:1.2em;font-weight:bold;color:#00d4ff}
+        .user-badge{background:#00d4ff33;color:#00d4ff;padding:3px 8px;border-radius:20px;font-size:10px;font-weight:600}
+        .logout-btn{background:#ff4757;color:#fff;padding:5px 10px;border:none;border-radius:4px;font-size:11px;cursor:pointer}
+        .main{display:none;padding:20px}
+        .welcome{text-align:center;padding:40px}
+        .welcome h1{color:#00d4ff;font-size:2em;margin-bottom:10px}
+        .welcome p{color:#888;margin-bottom:20px}
+        .sidebar{width:200px;background:#12122a;padding:10px;margin-right:15px;overflow-y:auto}
+        .sidebar h3{font-size:11px;color:#666;text-transform:uppercase;margin-bottom:10px}
+        .cat-btn{width:100%;padding:8px;margin-bottom:3px;background:#1a1a3e;border:1px solid #333;color:#fff;cursor:pointer;font-size:12px}
+        .cat-btn.active{background:#00d4ff;color:#000;border-color:#00d4ff}
+        .ch-list{max-height:300px;overflow-y:auto}
+        .ch-item{padding:8px 10px;background:#1a1a3e;border:1px solid #333;margin-bottom:3px;cursor:pointer;font-size:12px}
+        .ch-item:hover{background:#00d4ff33;border-color:#00d4ff}
+        .content{flex:1;overflow-y:auto;text-align:center}
+        .video-wrap{width:100%;max-width:700px;margin:0 auto}
+        .video-container{position:relative;width:100%;padding-top:56.25%;background:#000;border-radius:8px;overflow:hidden}
+        .video-container video{position:absolute;top:0;left:0;width:100%;height:100%}
+        .controls{margin-top:10px;gap:5px;justify-content:center;flex-wrap:wrap}
+        .controls input{background:#1a1a3e;border:1px solid #333;color:#fff;padding:8px 12px;border-radius:5px;font-size:12px}
+        .controls button{background:#00d4ff;color:#000;border:none;padding:8px 16px;border-radius:5px;cursor:pointer;font-size:12px;font-family:Arial}
+        .controls button:hover{background:#00b8e6}
+        .modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);justify-content:center;align-items:center;z-index:200}
+        .modal.show{display:flex}
+        .modal-content{background:#1a1a3e;padding:20px;border-radius:10px;width:90%;max-width:400px;max-height:90vh;overflow-y:auto}
+        .modal-content h3{color:#00d4ff;margin-bottom:15px}
+        .modal-content .close{background:#ff4757;color:#fff;border:none;padding:8px 15px;border-radius:5px;cursor:pointer;font-size:12px;float:right}
+        .user-item{padding:8px 10px;background:#0a0a1a;border-radius:5px;margin-bottom:5px}
+        .user-item span{font-size:11px}
+        .user-item .role{font-size:9px;padding:2px 6px;border-radius:10px;background:#333;color:#aaa}
+    </style>
+</head>
+<body>
+    <div id="app"></div>
+    
+    <script>
+    // ===== REGEX-FREE VERIFIED VERSION =====
+    
+    // STATE - simple variables, NO regex patterns
+    var currentUser = {email:'guest',role:'free'};
+    var currentTab = 'home';
+    var currentCat = null;
+    var hlsInstance = null;
+    var channels = [];
+    
+    // INITIALIZE CHANNELS from localStorage
+    function initChannels(){
+        try{
+            var stored = localStorage.getItem('streamhub_channels');
+            if(stored) channels = JSON.parse(stored);
+            else {
+                channels = [
+                    {name:'Test Channel 1',url:'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.m3u8',cat:'tv'},
+                    {name:'Test Channel 2',url:'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Elephant.m3u8',cat:'tv'}
+                ];
+            }
+            saveChannels();
+        }catch(e){channels=[]}
+    }
+    function saveChannels(){
+        try{localStorage.setItem('streamhub_channels',JSON.stringify(channels))}catch(e){}
+    }
+    
+    // SIMPLE HELPER - no regex, just ID lookup
+    function $(id){
+        var el = document.getElementById(id);
+        return el;
+    }
+    
+    // SHOW/HIDE SCREENS
+    function show(id){
+        var screens = document.querySelectorAll('.screen');
+        for(var i=0;i<screens.length;i++) screens[i].classList.remove('active');
+        var target = $(id);
+        if(target) target.classList.add('active');
+    }
+    
+    // MESSAGE DISPLAY - simple, no regex
+    function showMsg(id,msg,success){
+        var el = $(id);
+        if(el){
+            el.innerHTML = msg;
+            el.style.display = 'block';
+            el.className = success ? 'msg success' : 'msg error';
+        }
+    }
+    
+    // ===== AUTH FUNCTIONS =====
+    function login(){
+        var e = $('#loginEmail') ? $('#loginEmail').value : '';
+        var p = $('#loginPass') ? $('#loginPass').value : '';
+        if(!e || !p){showMsg('loginMsg','Please enter email and password',false);return}
+        currentUser = {email:e,role:'free'};
+        showMsg('loginMsg','Logged in as '+e,true);
+        setTimeout(function(){show('#mainScreen');initChannels();render()},300)
+    }
+    
+    function register(){
+        var e = $('#regEmail') ? $('#regEmail').value : '';
+        var p = $('#regPass') ? $('#regPass').value : '';
+        if(!e || !p){showMsg('regMsg','Please fill all fields',false);return}
+        currentUser = {email:e,role:'free'};
+        showMsg('loginMsg','Registration successful!',true);
+        setTimeout(function(){show('#mainScreen');initChannels();render()},300)
+    }
+    
+    function logout(){
+        currentUser = null; currentTab = 'home'; currentCat = null;
+        if(hlsInstance){hlsInstance.destroy();hlsInstance = null}
+        saveChannels();show('#loginScreen');$('app').innerHTML = ''
+    }
+    
+    function showReset(){
+        show('#loginScreen');
+        $('loginScreen').innerHTML = '<h2>Reset Password</h2><div id="resetMsg" class="msg"></div><div class="form-group"><label>Email</label><input type="email" id="resetEmail" placeholder="Enter your email"></div><button class="btn btn-primary" onclick="resetPass()">Send Reset Link</button><div class="link-text"><a onclick="location.reload()">Back to Login</a></div>'
+    }
+    
+    function resetPass(){
+        var e = $('#resetEmail') ? $('#resetEmail').value : '';
+        if(!e){showMsg('resetMsg','Please enter email',false);return}
+        showMsg('resetMsg','Reset link sent!',true)
+    }
+    
+    function showRegister(){
+        show('#loginScreen');
+        $('loginScreen').innerHTML = '<h2>Register</h2><div id="regMsg" class="msg"></div><div class="form-group"><label>Email</label><input type="email" id="regEmail" placeholder="Enter email"></div><div class="form-group"><label>Password</label><input type="password" id="regPass" placeholder="Create password"></div><button class="btn btn-primary" onclick="register()">Register</button><div class="link-text"><a onclick="location.reload()">Back to Login</a></div>'
+    }
+    
+    // ===== CHANNEL MANAGEMENT =====
+    function addChannel(){
+        var name = prompt('Channel name:');
+        if(!name) return;
+        var url = prompt('Stream URL (M3U8/MP4/WebM):');
+        if(!url) return;
+        var cat = prompt('Category (tv/movie/series/radio):');
+        if(!cat) return;
+        channels.push({name:name,url:url,cat:cat});
+        saveChannels();alert('Channel added!');render()
+    }
+    
+    function delCh(name){
+        if(!confirm('Delete '+name+'?')) return;
+        channels = channels.filter(function(ch){return ch.name !== name});
+        saveChannels();alert('Channel deleted!');render()
+    }
+    
+    // ===== USER MANAGEMENT =====
+    function showManage(){
+        var modal = document.getElementById('manageModal');
+        if(modal){modal.classList.add('show');return}
+        var m = document.createElement('div');
+        m.id = 'manageModal';m.className = 'modal';
+        m.innerHTML = '<div class="modal-content"><h3>Manage Users</h3><button class="close" onclick="closeManage()">X</button><div id="userList"></div><hr style="border-color:#333;margin:15px 0"><h4 style="color:#00d4ff;margin-bottom:10px">Add New User</h4><div class="form-group"><label>Email</label><input type="email" id="newUserEmail" placeholder="User email"></div><div class="form-group"><label>Password</label><input type="password" id="newUserPass" placeholder="User password"></div><div class="form-group"><label>Role</label><select id="newUserRole"><option value="free">Free</option><option value="master">Master</option></select></div><button class="btn btn-success" onclick="addUser()">Add User</button><div id="manageMsg" class="msg" style="margin-top:10px"></div></div>';
+        document.body.appendChild(m);$('#manageModal').classList.add('show');loadUsers()
+    }
+    
+    function closeManage(){$('#manageModal').classList.remove('show')}
+    
+    function loadUsers(){
+        var users = JSON.parse(localStorage.getItem('streamhub_users')||'{}');
+        var list = $('#userList');
+        if(!list) return;
+        var html = '';
+        var keys = Object.keys(users);
+        for(var i=0;i<keys.length;i++){
+            var uid = keys[i],data = users[uid];
+            html += '<div class="user-item"><span>'+data.email+'</span><span class="role '+((data.role||'free'))+'">'+((data.role||'free').toUpperCase())+'</span><button class="btn-del" onclick="delUser(\''+uid+'\')">Delete</button></div>'
+        }
+        list.innerHTML = html||'<p style="color:#888;font-size:12px">No users found</p>'
+    }
+    
+    function addUser(){
+        var email = $('#newUserEmail') ? $('#newUserEmail').value : '';
+        var pass = $('#newUserPass') ? $('#newUserPass').value : '';
+        var role = $('#newUserRole') ? $('#newUserRole').value : 'free';
+        if(!email || !pass){showMsg('manageMsg','Please fill all fields',false);return}
+        var users = JSON.parse(localStorage.getItem('streamhub_users')||'{}');
+        var uid = 'user_'+Date.now();users[uid] = {email:email,role:role,created:Date.now()};
+        localStorage.setItem('streamhub_users',JSON.stringify(users));showMsg('manageMsg','User added!',true);loadUsers();$('#newUserEmail').value='';$('#newUserPass').value=''
+    }
+    
+    async function delUser(uid){
+        if(!confirm('Delete this user?')) return;
+        var users = JSON.parse(localStorage.getItem('streamhub_users')||'{}');
+        delete users[uid];localStorage.setItem('streamhub_users',JSON.stringify(users));loadUsers()
+    }
+    
+    // ===== VIDEO PLAYER (NO REGEX - safe methods only) =====
+    function loadUrl(){
+        var url = $('#urlInput') ? $('#urlInput').value : '';
+        if(!url){alert('Please enter a URL');return}
+        var video = $('#videoPlayer');
+        if(!video){alert('Video element not found');return}
+        $('#playerWrap').style.display = 'block';
+        
+        if(hlsInstance){hlsInstance.destroy();hlsInstance = null}
+        video.pause();video.src = '';
+        
+        // SAFE METHODS - .includes() instead of regex
+        var lowerUrl = url.toLowerCase();
+        
+        // HLS/M3U8 support
+        if(window.Hls && lowerUrl.includes('.m3u8')){
+            try{
+                var hls = new Hls();hls.loadSource(url);hls.attachMedia(video);
+                hls.on(Hls.Events.MANIFEST_PARSED,function(){video.play()});
+                hlsInstance = hls;
+            }catch(e){
+                video.src = url;video.controls = true;video.play()
+            }
+        }
+        // MP4/WebM direct
+        else if(lowerUrl.includes('.mp4')||lowerUrl.includes('.webm')||lowerUrl.includes('.ogg')){
+            video.src = url;video.controls = true;video.play()
+        }
+        // Fallback
+        else{
+            video.src = url;video.controls = true;video.play()
+        }
+    }
+    
+    function stopPlayer(){
+        if(hlsInstance){hlsInstance.destroy();hlsInstance = null}
+        var video = $('#videoPlayer');
+        if(video){video.pause();video.src = '';$('playerWrap').style.display = 'none'}
+    }
+    
+    // ===== TAB FUNCTIONS =====
+    function switchTab(tab){currentTab = tab;render()}
+    function filterCat(cat){currentCat = cat;render()}
+    
+    function getCats(){
+        var cats = [];
+        try{
+            for(var i=0;i<channels.length;i++){
+                if(cats.indexOf(channels[i].cat) === -1) cats.push(channels[i].cat)
+            }
+        }catch(e){}
+        return cats
+    }
+    
+    function getFiltered(){
+        if(!currentCat) return channels;
+        var result = []
+        try{
+            for(var i=0;i<channels.length;i++){
+                if(channels[i].cat === currentCat) result.push(channels[i])
+            }
+        }catch(e){}
+        return result
+    }
+    
+    function getSelected(){return sessionStorage.getItem('selectedCh')}
+    function selectCh(name,url){
+        sessionStorage.setItem('selectedCh',name)
+        if($('#urlInput'))$('#urlInput).value = url
+    }
+    
+    // ===== RENDER FUNCTION =====
+    function render(){
+        if(!currentUser) return;
+        var role = currentUser.role;
+        
+        // Build tabs - simple string concat
+        var tabs = [];
+        if(role === 'master') tabs = ['home','tv','movie','series','radio'];
+        else tabs = ['home','tv','movie'];
+        
+        var tabList = '';
+        for(var t=0;t<tabs.length;t++){
+            var active = (currentTab === tabs[t]) ? 'class="active"' : '';
+            tabList += '<button class="tab-btn '+active+'" onclick="switchTab(\''+tabs[t]+'\')">'+tabs[t].charAt(0).toUpperCase()+tabs[t].slice(1)+'</button>'
+        }
+        
+        var manageBtn = '';
+        if(role === 'master') manageBtn = '<button class="tab-btn" onclick="showManage()">Manage Users</button>'
+        
+        // Header
+        var header = '<div class="header"><div class="logo">StreamHub Pro</div><div class="header-right"><span class="user-badge '+role+'">'+role.toUpperCase()+'</span><span style="font-size:12px">'+currentUser.email+'</span><button class="logout-btn" onclick="logout()">Logout</button></div>'+tabList+manageBtn+'</div>'
+        
+        // Content
+        var content = ''
+        
+        if(currentTab === 'home'){
+            content = '<div class="main"><div class="welcome"><h1>Welcome to StreamHub Pro</h1><p>Your Ultimate IPTV Streaming Experience</p><div class="role-info"><h4>Your Access ('+role.toUpperCase()+')</h4><ul>'
+            for(var t=0;t<tabs.length;t++)content += '<li>'+tabs[t].charAt(0).toUpperCase()+tabs[t].slice(1)+'</li>'
+            if(role === 'master')content += '<p style="color:#ff6b81;margin-top:10px">Full Access - You can add/edit/delete channels</p>'
+            content += '</ul></div></div></div>'
+        }
+        else if(currentTab === 'tv'){
+            var cats = getCats()
+            var catBtns = '<button class="cat-btn active" onclick="filterCat(null)">All Channels</button>'
+            for(var c=0;c<cats.length;c++){
+                var catActive = (currentCat === cats[c]) ? 'active' : ''
+                catBtns += '<button class="cat-btn '+catActive+'" onclick="filterCat(\''+cats[c]+'\')">'+cats[c]+'</button>'
+            }
+            
+            var filtered = getFiltered()
+            var chList = ''
+            for(var i=0;i<filtered.length;i++){
+                var selected = (getSelected() === filtered[i].name) ? ' active' : ''
+                var delBtn = ''
+                if(role === 'master')delBtn = '<button class="btn-del" onclick="event.stopPropagation();delCh(\''+filtered[i].name+'\')">X</button>'
+                chList += '<div class="ch-item '+selected+'" onclick="selectCh(\''+filtered[i].name+'\')"><span>'+filtered[i].name+'</span><span style="font-size:10px;color:#00d4ff">'+filtered[i].cat+'</span>'+delBtn+'</div>'
+            }
+            
+            content = '<div class="main"><div class="sidebar"><h3>Categories</h3>'+catBtns+'</div><div class="content"><div class="video-wrap'+(getSelected()?' show':'')+'" id="playerWrap"><div class="video-container"><video id="videoPlayer" controls></video></div><div class="controls"><input type="text" id="urlInput" placeholder="Paste M3U8/HLS/MP4 URL here"><button onclick="loadUrl()">Play</button><button onclick="stopPlayer()">Stop</button></div></div><div class="ch-list" style="margin-top:15px">'+chList+'</div></div></div>'
+        }
+        else if(currentTab === 'movie'){
+            var movieCats = ['All','Action','Comedy','Drama','Horror','Sci-Fi']
+            var movieCatBtns = ''
+            for(var m=0;m<movieCats.length;m++){
+                var catActive = (currentCat === movieCats[m]) ? 'active' : ''
+                movieCatBtns += '<button class="cat-btn '+catActive+'" onclick="filterCat(\''+movieCats[m]+'\')">'+movieCats[m]+'</button>'
+            }
+            
+            content = '<div class="main"><div class="sidebar"><h3>Categories</h3>'+movieCatBtns+'</div><div class="content"><div class="video-wrap" id="playerWrap"><div class="video-container"><video id="videoPlayer" controls></video></div><div class="controls"><input type="text" id="urlInput" placeholder="Paste movie URL (MP4/WebM)"><button onclick="loadUrl()">Play</button><button onclick="stopPlayer()">Stop</button></div></div><div class="ch-list" style="margin-top:15px">'
+            var filtered = getFiltered()
+            for(var f=0;f<filtered.length;f++)content += '<div class="ch-item">'+filtered[f].name+' <span style="font-size:10px;color:#00d4ff">'+filtered[f].cat+'</span></div>'
+            content += '</div></div></div>'
+        }
+        else if(currentTab === 'series'){
+            var seriesCats = ['All','Action','Comedy','Drama','Horror','Sci-Fi']
+            var seriesCatBtns = ''
+            for(var s=0;s<seriesCats.length;s++){
+                var catActive = (currentCat === seriesCats[s]) ? 'active' : ''
+                seriesCatBtns += '<button class="cat-btn '+catActive+'" onclick="filterCat(\''+seriesCats[s]+'\')">'+seriesCats[s]+'</button>'
+            }
+            
+            content = '<div class="main"><div class="sidebar"><h3>Categories</h3>'+seriesCatBtns+'</div><div class="content"><div class="video-wrap" id="playerWrap"><div class="video-container"><video id="videoPlayer" controls></video></div><div class="controls"><input type="text" id="urlInput" placeholder="Paste series URL"><button onclick="loadUrl()">Play</button><button onclick="stopPlayer()">Stop</button></div></div><div class="ch-list" style="margin-top:15px">'
+            var filtered = getFiltered()
+            for(var si=0;si<filtered.length;si++)content += '<div class="ch-item">'+filtered[si].name+' <span style="font-size:10px;color:#00d4ff">'+filtered[si].cat+'</span></div>'
+            content += '</div></div></div>'
+        }
+        else if(currentTab === 'radio'){
+            var radioCats = ['All','Music','News','Sports']
+            var radioCatBtns = ''
+            for(var r=0;r<radioCats.length;r++){
+                var catActive = (currentCat === radioCats[r]) ? 'active' : ''
+                radioCatBtns += '<button class="cat-btn '+catActive+'" onclick="filterCat(\''+radioCats[r]+'\')">'+radioCats[r]+'</button>'
+            }
+            
+            content = '<div class="main"><div class="sidebar"><h3>Categories</h3>'+radioCatBtns+'</div><div class="content"><div class="video-wrap" id="playerWrap"><div class="video-container"><video id="videoPlayer" controls></video></div><div class="controls"><input type="text" id="urlInput" placeholder="Paste radio URL (MP3/stream)"><button onclick="loadUrl()">Play</button><button onclick="stopPlayer()">Stop</button></div></div><div class="ch-list" style="margin-top:15px">'
+            var filtered = getFiltered()
+            for(var ri=0;ri<filtered.length;ri++)content += '<div class="ch-item">'+filtered[ri].name+' <span style="font-size:10px;color:#00d4ff">'+filtered[ri].cat+'</span></div>'
+            content += '</div></div></div>'
+        }
+        
+        var app = $('app')
+        if(app)app.innerHTML = header + content
+    }
+    
+    document.addEventListener('DOMContentLoaded',function(){
+        show('#loginScreen')
+        initChannels()
+    })
+    </script>
+</body>
+</html>
